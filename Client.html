@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live Webcam Inference</title>
+    <style>
+        body { text-align: center; font-family: Arial, sans-serif; background: #f5f5f5; }
+        video, img { max-width: 80%; margin-top: 20px; border: 2px solid #ccc; }
+    </style>
+</head>
+<body>
+    <h1>Live Webcam Inference</h1>
+    <video id="video" autoplay playsinline></video>
+    <br>
+    <img id="result" alt="Predictions will appear here">
+    
+    <script>
+        const EC2_URL = "http://3.109.56.15:8000/predict"; // Change this to your EC2 IP
+
+        const video = document.getElementById('video');
+        const resultImg = document.getElementById('result');
+
+        // Ask for webcam access
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => { video.srcObject = stream; })
+            .catch(err => console.error("Webcam error:", err));
+
+        // Send frames periodically
+        setInterval(() => {
+            captureAndSendFrame();
+        }, 500); // Every 0.5 sec
+
+        async function captureAndSendFrame() {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+            const formData = new FormData();
+            formData.append('file', blob, 'frame.jpg');
+
+            try {
+                const response = await fetch(EC2_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                // Assuming server returns image with predictions
+                const arrayBuffer = await response.arrayBuffer();
+                const base64 = arrayBufferToBase64(arrayBuffer);
+                resultImg.src = "data:image/jpeg;base64," + base64;
+
+            } catch (err) {
+                console.error("Error sending frame:", err);
+            }
+        }
+
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const chunkSize = 0x8000;
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                const chunk = bytes.subarray(i, i + chunkSize);
+                binary += String.fromCharCode.apply(null, chunk);
+            }
+            return btoa(binary);
+        }
+    </script>
+</body>
+</html>
